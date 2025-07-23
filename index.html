@@ -379,7 +379,8 @@
                             if (pieceType === 'p') { // Pawn
                                 isValidMove = isValidPawnMove(fromCoords.row, fromCoords.col, clickedCoords.row, clickedCoords.col, pieceCodeToMove, currentBoardState);
                             } else if (pieceType === 'r') { // Rook
-                                isValidMove = isValidRookMove(fromCoords.row, fromCol.col, clickedCoords.row, clickedCoords.col, pieceCodeToMove, currentBoardState);
+                                // FIX: Corrected fromCol.col to fromCoords.col
+                                isValidMove = isValidRookMove(fromCoords.row, fromCoords.col, clickedCoords.row, clickedCoords.col, pieceCodeToMove, currentBoardState);
                             }
                             else {
                                 // For other pieces, allow any move for now (will be validated later)
@@ -427,6 +428,7 @@
                                     clickedSquare.classList.add('selected-square');
                                 } else {
                                     console.log(`It's ${turn}'s turn. Cannot select opponent's piece.`);
+                                    // Optional: Add a visual indicator or message to the user here
                                 }
                             }
                         }
@@ -444,7 +446,11 @@
 
             // Define patch notes content
             const patchNotes = `
-                <h3 class="text-xl font-semibold mb-2">Version 0.1.7 - Rook Move Validation</h3>
+                <h3 class="text-xl font-semibold mb-2">Version 0.1.8 - Rook Move Validation Fix</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>**Bug Fix:** Corrected a typo in the call to <code>isValidRookMove</code> where <code>fromCol.col</code> was incorrectly used instead of <code>fromCoords.col</code>. This resolves the issue where rooks could not move correctly even if their path was clear.</li>
+                </ul>
+                <h3 class="text-xl font-semibold mt-4 mb-2">Version 0.1.7 - Rook Move Validation</h3>
                 <ul class="list-disc list-inside ml-4">
                     <li>Implemented <code>isValidRookMove</code> function to validate rook moves:
                         <ul class="list-circle list-inside ml-4">
