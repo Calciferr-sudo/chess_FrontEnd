@@ -53,13 +53,19 @@
 
         /* Piece colors - Adjusted for better visibility */
         .white-piece {
-            color: #ececec; /* Dark color for white pieces for contrast */
-            text-shadow: 1px 1px 2px rgba(255,255,255,0.4); /* Subtle shadow for definition */
+            color: #ececec; /* White pieces - user requested color */
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.4); /* Subtle shadow for definition */
         }
 
         .black-piece {
             color: #333333; /* Dark color for black pieces */
             text-shadow: 1px 1px 2px rgba(255,255,255,0.4); /* Subtle shadow for definition */
+        }
+
+        /* Styling for selected square */
+        .selected-square {
+            background-color: #63b3ed !important; /* Blue for selected square */
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
         }
 
         /* Patch Notes Modal Styles */
@@ -192,7 +198,120 @@
                 return board;
             }
 
-            const currentBoardState = parseFEN(initialBoardFEN);
+            let currentBoardState = parseFEN(initialBoardFEN); // Make mutable
+            let selectedPieceElement = null; // Stores the HTML element of the selected piece
+            let selectedSquareId = null;     // Stores the ID of the square the piece was selected from
+            let turn = 'white'; // Initial turn is white
+
+            // Function to get row and column from a square ID (e.g., 'a1' -> {row: 7, col: 0})
+            function getCoordsFromId(squareId) {
+                const file = squareId.charCodeAt(0) - 97; // 'a' is 0, 'b' is 1, etc.
+                const rank = 8 - parseInt(squareId[1]); // '8' is row 0, '1' is row 7
+                return { row: rank, col: file };
+            }
+
+            // Function to get square ID from row and column (e.g., {row: 7, col: 0} -> 'a1')
+            function getIdFromCoords(row, col) {
+                const file = String.fromCharCode(97 + col);
+                const rank = 8 - row;
+                return `${file}${rank}`;
+            }
+
+            // --- Piece Validation Helper Functions ---
+            function isWhitePiece(pieceCode) {
+                return pieceCode && pieceCode === pieceCode.toUpperCase();
+            }
+
+            function isBlackPiece(pieceCode) {
+                return pieceCode && pieceCode === pieceCode.toLowerCase();
+            }
+
+            function getPieceColor(pieceCode) {
+                if (!pieceCode) return null;
+                return isWhitePiece(pieceCode) ? 'white' : 'black';
+            }
+
+            // --- Piece Validation Logic ---
+
+            function isValidPawnMove(fromRow, fromCol, toRow, toCol, pieceCode, board) {
+                const pieceColor = getPieceColor(pieceCode);
+                const rowDiff = toRow - fromRow;
+                const colDiff = Math.abs(toCol - fromCol);
+
+                const targetPiece = board[toRow][toCol];
+                const isTargetOccupiedByEnemy = (targetPiece && getPieceColor(targetPiece) !== pieceColor);
+
+                // Pawns cannot move horizontally or backwards (except for captures, handled below)
+                if (colDiff > 1) return false;
+
+                // White Pawn
+                if (pieceColor === 'white') {
+                    // Forward one square
+                    if (rowDiff === -1 && colDiff === 0 && !targetPiece) {
+                        return true;
+                    }
+                    // Forward two squares (initial move only)
+                    if (fromRow === 6 && rowDiff === -2 && colDiff === 0 && !targetPiece && !board[fromRow - 1][fromCol]) {
+                        return true;
+                    }
+                    // Capture diagonally
+                    if (rowDiff === -1 && colDiff === 1 && isTargetOccupiedByEnemy) {
+                        return true;
+                    }
+                }
+                // Black Pawn
+                else if (pieceColor === 'black') {
+                    // Forward one square
+                    if (rowDiff === 1 && colDiff === 0 && !targetPiece) {
+                        return true;
+                    }
+                    // Forward two squares (initial move only)
+                    if (fromRow === 1 && rowDiff === 2 && colDiff === 0 && !targetPiece && !board[fromRow + 1][fromCol]) {
+                        return true;
+                    }
+                    // Capture diagonally
+                    if (rowDiff === 1 && colDiff === 1 && isTargetOccupiedByEnemy) {
+                        return true;
+                    }
+                }
+
+                return false; // Default to invalid
+            }
+
+            function isValidRookMove(fromRow, fromCol, toRow, toCol, pieceCode, board) {
+                const pieceColor = getPieceColor(pieceCode);
+                const targetPiece = board[toRow][toCol];
+
+                // Rooks move horizontally or vertically
+                if (fromRow !== toRow && fromCol !== toCol) {
+                    return false; // Not a straight line
+                }
+
+                // Check for blocking pieces
+                if (fromRow === toRow) { // Horizontal move
+                    const step = (toCol > fromCol) ? 1 : -1;
+                    for (let col = fromCol + step; col !== toCol; col += step) {
+                        if (board[fromRow][col]) {
+                            return false; // Path is blocked
+                        }
+                    }
+                } else { // Vertical move
+                    const step = (toRow > fromRow) ? 1 : -1;
+                    for (let row = fromRow + step; row !== toRow; row += step) {
+                        if (board[row][fromCol]) {
+                            return false; // Path is blocked
+                        }
+                    }
+                }
+
+                // Cannot land on a square occupied by an ally
+                if (targetPiece && getPieceColor(targetPiece) === pieceColor) {
+                    return false;
+                }
+
+                return true; // Valid rook move
+            }
+
 
             // --- Chessboard Generation and Piece Placement ---
             for (let row = 0; row < boardSize; row++) {
@@ -212,7 +331,7 @@
                         const pieceElement = document.createElement('span');
                         pieceElement.classList.add('piece');
                         // Determine piece color based on case
-                        if (pieceCode === pieceCode.toUpperCase()) {
+                        if (isWhitePiece(pieceCode)) {
                             pieceElement.classList.add('white-piece');
                         } else {
                             pieceElement.classList.add('black-piece');
@@ -220,6 +339,98 @@
                         pieceElement.textContent = pieces[pieceCode];
                         square.appendChild(pieceElement);
                     }
+
+                    // Add click event listener to each square
+                    square.addEventListener('click', (event) => {
+                        const clickedSquare = event.currentTarget; // The square div
+                        const clickedPiece = clickedSquare.querySelector('.piece'); // The piece span inside it
+                        const clickedSquareId = clickedSquare.id;
+                        const clickedCoords = getCoordsFromId(clickedSquareId);
+                        const pieceAtClickedSquare = currentBoardState[clickedCoords.row][clickedCoords.col];
+
+                        if (selectedPieceElement) {
+                            // A piece is already selected, now try to move it
+                            const fromCoords = getCoordsFromId(selectedSquareId);
+                            const pieceCodeToMove = currentBoardState[fromCoords.row][fromCoords.col];
+                            const pieceColorToMove = getPieceColor(pieceCodeToMove);
+
+                            // Check if the clicked square contains a piece of the same color (illegal move)
+                            if (clickedPiece && getPieceColor(pieceAtClickedSquare) === pieceColorToMove) {
+                                // If clicking on an ally piece, deselect current and select new ally piece
+                                document.getElementById(selectedSquareId).classList.remove('selected-square');
+                                selectedPieceElement = clickedPiece;
+                                selectedSquareId = clickedSquareId;
+                                clickedSquare.classList.add('selected-square');
+                                return;
+                            }
+
+                            // If clicking on the same square, deselect
+                            if (selectedSquareId === clickedSquareId) {
+                                document.getElementById(selectedSquareId).classList.remove('selected-square');
+                                selectedPieceElement = null;
+                                selectedSquareId = null;
+                                return;
+                            }
+
+                            // --- Move Validation Check ---
+                            let isValidMove = false;
+                            const pieceType = pieceCodeToMove.toLowerCase();
+
+                            if (pieceType === 'p') { // Pawn
+                                isValidMove = isValidPawnMove(fromCoords.row, fromCoords.col, clickedCoords.row, clickedCoords.col, pieceCodeToMove, currentBoardState);
+                            } else if (pieceType === 'r') { // Rook
+                                isValidMove = isValidRookMove(fromCoords.row, fromCol.col, clickedCoords.row, clickedCoords.col, pieceCodeToMove, currentBoardState);
+                            }
+                            else {
+                                // For other pieces, allow any move for now (will be validated later)
+                                isValidMove = true;
+                            }
+
+
+                            if (isValidMove) {
+                                // If there's a piece at the target square, remove it (capture)
+                                if (clickedPiece) {
+                                    clickedPiece.remove();
+                                }
+
+                                // Move the piece visually
+                                clickedSquare.appendChild(selectedPieceElement);
+
+                                // Update the internal board state
+                                currentBoardState[fromCoords.row][fromCoords.col] = null; // Clear old position
+                                currentBoardState[clickedCoords.row][clickedCoords.col] = pieceCodeToMove; // Set new position
+
+                                // Deselect the piece
+                                document.getElementById(selectedSquareId).classList.remove('selected-square');
+                                selectedPieceElement = null;
+                                selectedSquareId = null;
+
+                                // Switch turn after a valid move
+                                turn = (turn === 'white') ? 'black' : 'white';
+                                console.log(`Current turn: ${turn}`); // For debugging
+                            } else {
+                                // Invalid move: deselect the piece and give feedback (optional for now)
+                                console.log("Invalid move for this piece.");
+                                document.getElementById(selectedSquareId).classList.remove('selected-square');
+                                selectedPieceElement = null;
+                                selectedSquareId = null;
+                            }
+
+                        } else {
+                            // No piece is selected, try to select one
+                            if (clickedPiece) {
+                                // Ensure only pieces of the current turn's color can be selected
+                                const pieceColor = getPieceColor(pieceAtClickedSquare);
+                                if (pieceColor === turn) {
+                                    selectedPieceElement = clickedPiece;
+                                    selectedSquareId = clickedSquareId;
+                                    clickedSquare.classList.add('selected-square');
+                                } else {
+                                    console.log(`It's ${turn}'s turn. Cannot select opponent's piece.`);
+                                }
+                            }
+                        }
+                    });
 
                     chessboardContainer.appendChild(square);
                 }
@@ -233,7 +444,54 @@
 
             // Define patch notes content
             const patchNotes = `
-                <h3 class="text-xl font-semibold mb-2">Version 0.1.3 - Improved Piece Visibility</h3>
+                <h3 class="text-xl font-semibold mb-2">Version 0.1.7 - Rook Move Validation</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Implemented <code>isValidRookMove</code> function to validate rook moves:
+                        <ul class="list-circle list-inside ml-4">
+                            <li>Allows movement any number of squares horizontally or vertically.</li>
+                            <li>Checks for and prevents moves through blocking pieces.</li>
+                            <li>Prevents landing on a square occupied by an ally piece.</li>
+                        </ul>
+                    </li>
+                    <li>Integrated rook move validation into the main click handler.</li>
+                    <li>Added a general <code>getPieceColor</code> helper function.</li>
+                </ul>
+                <h3 class="text-xl font-semibold mt-4 mb-2">Version 0.1.6 - Pawn Move Validation & Turns</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Introduced a <code>turn</code> variable (initially 'white') to manage whose turn it is.</li>
+                    <li>Implemented a <code>isValidPawnMove</code> function to validate pawn moves according to basic chess rules:
+                        <ul class="list-circle list-inside ml-4">
+                            <li>Forward one square to an empty square.</li>
+                            <li>Forward two squares from the starting rank (only if both squares are empty).</li>
+                            <li>Diagonal capture (forward one, sideways one) if an opponent's piece is present.</li>
+                            <li>Prevents moving backwards or horizontally for non-captures.</li>
+                            <li>Prevents moving onto a square occupied by an ally.</li>
+                        </ul>
+                    </li>
+                    <li>Modified the click handler to:
+                        <ul class="list-circle list-inside ml-4">
+                            <li>Only allow selection of pieces belonging to the current turn's color.</li>
+                            <li>Validate pawn moves using <code>isValidPawnMove</code> before executing.</li>
+                            <li>Automatically switch turns after a valid move.</li>
+                            <li>Handle basic captures by removing the captured piece from the DOM and board state.</li>
+                            <li>Deselect piece if an invalid move is attempted.</li>
+                        </ul>
+                    </li>
+                </ul>
+                <h3 class="text-xl font-semibold mt-4 mb-2">Version 0.1.5 - Basic Piece Movement</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Implemented basic piece selection: clicking a piece highlights its square.</li>
+                    <li>Implemented basic piece movement: clicking an empty square after selecting a piece moves the piece to that square.</li>
+                    <li>Updated the internal <code>currentBoardState</code> array to reflect visual moves.</li>
+                    <li>Added a <code>.selected-square</code> CSS class for visual feedback on selected squares.</li>
+                    <li>Added helper functions <code>getCoordsFromId</code> and <code>getIdFromCoords</code> for easier coordinate mapping.</li>
+                    <li>**Note:** This version does NOT include any chess rule validation. Pieces can move anywhere.</li>
+                </ul>
+                <h3 class="text-xl font-semibold mt-4 mb-2">Version 0.1.4 - White Piece Color Update</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Updated the color of white chess pieces to <code>#ececec</code> as requested for better visibility.</li>
+                </ul>
+                <h3 class="text-xl font-semibold mt-4 mb-2">Version 0.1.3 - Improved Piece Visibility (Previous)</h3>
                 <ul class="list-disc list-inside ml-4">
                     <li>Adjusted the color of white chess pieces to a darker shade (<code>#333333</code>) for significantly improved contrast and visibility on light squares.</li>
                     <li>Ensured both white and black pieces use the same dark color for consistent readability across the board.</li>
