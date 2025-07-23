@@ -312,6 +312,81 @@
                 return true; // Valid rook move
             }
 
+            function isValidKnightMove(fromRow, fromCol, toRow, toCol, pieceCode, board) {
+                const pieceColor = getPieceColor(pieceCode);
+                const targetPiece = board[toRow][toCol];
+
+                const rowDiff = Math.abs(toRow - fromRow);
+                const colDiff = Math.abs(toCol - fromCol);
+
+                // Knight moves are L-shaped: 2 squares in one direction (horiz/vert) and 1 square perpendicular
+                const isLShape = (rowDiff === 2 && colDiff === 1) || (rowDiff === 1 && colDiff === 2);
+
+                if (!isLShape) {
+                    return false; // Not an L-shaped move
+                }
+
+                // Cannot land on a square occupied by an ally
+                if (targetPiece && getPieceColor(targetPiece) === pieceColor) {
+                    return false;
+                }
+
+                // Knights can jump over pieces, so no path blocking check is needed
+
+                return true; // Valid knight move
+            }
+
+            function isValidBishopMove(fromRow, fromCol, toRow, toCol, pieceCode, board) {
+                const pieceColor = getPieceColor(pieceCode);
+                const targetPiece = board[toRow][toCol];
+
+                const rowDiff = Math.abs(toRow - fromRow);
+                const colDiff = Math.abs(toCol - fromCol);
+
+                // Bishops move diagonally, so rowDiff must equal colDiff
+                if (rowDiff !== colDiff || rowDiff === 0) { // rowDiff === 0 covers cases where fromRow === toRow
+                    return false; // Not a diagonal move
+                }
+
+                // Determine direction steps
+                const rowStep = (toRow > fromRow) ? 1 : -1;
+                const colStep = (toCol > fromCol) ? 1 : -1;
+
+                // Check for blocking pieces along the diagonal path
+                let currentRow = fromRow + rowStep;
+                let currentCol = fromCol + colStep;
+
+                while (currentRow !== toRow && currentCol !== toCol) {
+                    if (board[currentRow][currentCol]) {
+                        return false; // Path is blocked
+                    }
+                    currentRow += rowStep;
+                    currentCol += colStep;
+                }
+
+                // Cannot land on a square occupied by an ally
+                if (targetPiece && getPieceColor(targetPiece) === pieceColor) {
+                    return false;
+                }
+
+                return true; // Valid bishop move
+            }
+
+            function isValidQueenMove(fromRow, fromCol, toRow, toCol, pieceCode, board) {
+                // Queen's move is a combination of Rook and Bishop moves
+                // Check if it's a valid horizontal or vertical move (like a Rook)
+                if (fromRow === toRow || fromCol === toCol) {
+                    return isValidRookMove(fromRow, fromCol, toRow, toCol, pieceCode, board);
+                }
+                // Check if it's a valid diagonal move (like a Bishop)
+                const rowDiff = Math.abs(toRow - fromRow);
+                const colDiff = Math.abs(toCol - fromCol);
+                if (rowDiff === colDiff) {
+                    return isValidBishopMove(fromRow, fromCol, toRow, toCol, pieceCode, board);
+                }
+                return false; // Not a valid Queen move
+            }
+
 
             // --- Chessboard Generation and Piece Placement ---
             for (let row = 0; row < boardSize; row++) {
@@ -379,11 +454,16 @@
                             if (pieceType === 'p') { // Pawn
                                 isValidMove = isValidPawnMove(fromCoords.row, fromCoords.col, clickedCoords.row, clickedCoords.col, pieceCodeToMove, currentBoardState);
                             } else if (pieceType === 'r') { // Rook
-                                // FIX: Corrected fromCol.col to fromCoords.col
                                 isValidMove = isValidRookMove(fromCoords.row, fromCoords.col, clickedCoords.row, clickedCoords.col, pieceCodeToMove, currentBoardState);
+                            } else if (pieceType === 'n') { // Knight
+                                isValidMove = isValidKnightMove(fromCoords.row, fromCoords.col, clickedCoords.row, clickedCoords.col, pieceCodeToMove, currentBoardState);
+                            } else if (pieceType === 'b') { // Bishop
+                                isValidMove = isValidBishopMove(fromCoords.row, fromCoords.col, clickedCoords.row, clickedCoords.col, pieceCodeToMove, currentBoardState);
+                            } else if (pieceType === 'q') { // Queen
+                                isValidMove = isValidQueenMove(fromCoords.row, fromCoords.col, clickedCoords.row, clickedCoords.col, pieceCodeToMove, currentBoardState);
                             }
                             else {
-                                // For other pieces, allow any move for now (will be validated later)
+                                // For King, allow any move for now (will be validated later)
                                 isValidMove = true;
                             }
 
@@ -446,7 +526,35 @@
 
             // Define patch notes content
             const patchNotes = `
-                <h3 class="text-xl font-semibold mb-2">Version 0.1.8 - Rook Move Validation Fix</h3>
+                <h3 class="text-xl font-semibold mb-2">Version 0.2.1 - Queen Move Validation</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Implemented <code>isValidQueenMove</code> function to validate queen moves.</li>
+                    <li>The Queen's validation reuses the logic from <code>isValidRookMove</code> (for horizontal/vertical) and <code>isValidBishopMove</code> (for diagonal) to ensure correct movement and blocking checks.</li>
+                    <li>Integrated queen move validation into the main click handler.</li>
+                </ul>
+                <h3 class="text-xl font-semibold mt-4 mb-2">Version 0.2.0 - Bishop Move Validation</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Implemented <code>isValidBishopMove</code> function to validate bishop moves:
+                        <ul class="list-circle list-inside ml-4">
+                            <li>Allows movement any number of squares diagonally.</li>
+                            <li>Checks for and prevents moves through blocking pieces along the diagonal path.</li>
+                            <li>Prevents landing on a square occupied by an ally piece.</li>
+                        </ul>
+                    </li>
+                    <li>Integrated bishop move validation into the main click handler.</li>
+                </ul>
+                <h3 class="text-xl font-semibold mt-4 mb-2">Version 0.1.9 - Knight Move Validation</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Implemented <code>isValidKnightMove</code> function to validate knight moves:
+                        <ul class="list-circle list-inside ml-4">
+                            <li>Allows 'L' shaped moves (2 squares in one cardinal direction, then 1 square perpendicular).</li>
+                            <li>Knights can jump over other pieces (no path blocking check needed).</li>
+                            <li>Prevents landing on a square occupied by an ally piece.</li>
+                        </ul>
+                    </li>
+                    <li>Integrated knight move validation into the main click handler.</li>
+                </ul>
+                <h3 class="text-xl font-semibold mt-4 mb-2">Version 0.1.8 - Rook Move Validation Fix</h3>
                 <ul class="list-disc list-inside ml-4">
                     <li>**Bug Fix:** Corrected a typo in the call to <code>isValidRookMove</code> where <code>fromCol.col</code> was incorrectly used instead of <code>fromCoords.col</code>. This resolves the issue where rooks could not move correctly even if their path was clear.</li>
                 </ul>
