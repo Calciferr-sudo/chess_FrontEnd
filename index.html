@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Chess</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        /* Custom styles for the chessboard */
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column; /* Changed to column for better layout with button */
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #1a202c; /* Dark background */
+            color: #e2e8f0; /* Light text */
+            padding: 1rem; /* Added padding for small screens */
+        }
+
+        .chessboard {
+            display: grid;
+            grid-template-columns: repeat(8, 60px); /* 8 columns, 60px each */
+            grid-template-rows: repeat(8, 60px);    /* 8 rows, 60px each */
+            border: 4px solid #4a5568; /* Border around the board */
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5); /* Soft shadow */
+            border-radius: 8px; /* Rounded corners for the board */
+            overflow: hidden; /* Ensures rounded corners apply to cells too */
+            margin-bottom: 2rem; /* Space below the board */
+        }
+
+        .square {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.5rem; /* Increased font size for pieces */
+            cursor: pointer; /* Indicate squares are interactive */
+            user-select: none; /* Prevent text selection on pieces */
+            transition: background-color 0.2s ease; /* Smooth transition for hover/selection */
+        }
+
+        /* Chessboard square colors */
+        .light {
+            background-color: #f0d9b5; /* Light square color */
+        }
+
+        .dark {
+            background-color: #b58863; /* Dark square color */
+        }
+
+        /* Piece colors - Adjusted for better visibility */
+        .white-piece {
+            color: #ececec; /* Dark color for white pieces for contrast */
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.4); /* Subtle shadow for definition */
+        }
+
+        .black-piece {
+            color: #333333; /* Dark color for black pieces */
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.4); /* Subtle shadow for definition */
+        }
+
+        /* Patch Notes Modal Styles */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 100; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.7); /* Black w/ opacity */
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: #2d3748; /* Darker background for modal */
+            margin: auto;
+            padding: 2rem;
+            border: 1px solid #4a5568;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            position: relative;
+            max-height: 80vh; /* Limit height for scrollability */
+            overflow-y: auto; /* Enable scrolling for content */
+        }
+
+        .close-button {
+            color: #aaa;
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-button:hover,
+        .close-button:focus {
+            color: #e2e8f0;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .chessboard {
+                grid-template-columns: repeat(8, min(12vw, 50px)); /* Smaller squares on small screens */
+                grid-template-rows: repeat(8, min(12vw, 50px));
+            }
+            .square {
+                width: min(12vw, 50px);
+                height: min(12vw, 50px);
+                font-size: 2rem; /* Adjust piece size for smaller screens */
+            }
+            .modal-content {
+                padding: 1rem;
+                width: 95%;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <h1 class="text-4xl font-extrabold mb-8 text-blue-400">Multiplayer Chess</h1>
+
+    <div id="chessboard-container" class="chessboard">
+        <!-- Chessboard squares and pieces will be generated here by JavaScript -->
+    </div>
+
+    <button id="patchNotesBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-300 ease-in-out transform hover:scale-105 mb-4">
+        Patch Notes
+    </button>
+
+    <!-- Patch Notes Modal -->
+    <div id="patchNotesModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2 class="text-3xl font-bold mb-4 text-blue-300">Patch Notes</h2>
+            <div id="patchNotesContent" class="text-gray-300">
+                <!-- Patch notes will be dynamically inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // JavaScript to dynamically create the chessboard squares and handle modal
+        document.addEventListener('DOMContentLoaded', () => {
+            const chessboardContainer = document.getElementById('chessboard-container');
+            const boardSize = 8; // 8x8 board
+
+            // --- Chess Pieces Definition (Unicode) ---
+            const pieces = {
+                'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟', // Black pieces
+                'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙'  // White pieces
+            };
+
+            // --- Initial Board State (FEN-like string for simplicity) ---
+            // Each character represents a piece:
+            // r, n, b, q, k, p = black rook, knight, bishop, queen, king, pawn
+            // R, N, B, Q, K, P = white rook, knight, bishop, queen, king, pawn
+            // '1' to '8' = empty squares
+            // Slashes '/' separate ranks
+            const initialBoardFEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
+
+            // Function to parse FEN-like string into a 2D array
+            function parseFEN(fen) {
+                const board = [];
+                const ranks = fen.split('/');
+                for (let i = 0; i < ranks.length; i++) {
+                    const rank = [];
+                    for (let j = 0; j < ranks[i].length; j++) {
+                        const char = ranks[i][j];
+                        if (char >= '1' && char <= '8') {
+                            // Add empty squares
+                            for (let k = 0; k < parseInt(char); k++) {
+                                rank.push(null); // null represents an empty square
+                            }
+                        } else {
+                            // Add a piece
+                            rank.push(char);
+                        }
+                    }
+                    board.push(rank);
+                }
+                return board;
+            }
+
+            const currentBoardState = parseFEN(initialBoardFEN);
+
+            // --- Chessboard Generation and Piece Placement ---
+            for (let row = 0; row < boardSize; row++) {
+                for (let col = 0; col < boardSize; col++) {
+                    const square = document.createElement('div');
+                    // Determine if the square is light or dark
+                    const isLight = (row + col) % 2 === 0;
+                    square.classList.add('square', isLight ? 'light' : 'dark');
+                    // Add an ID for each square (e.g., 'a1', 'h8')
+                    const file = String.fromCharCode(97 + col); // 'a' through 'h'
+                    const rank = 8 - row; // '8' through '1'
+                    square.id = `${file}${rank}`;
+
+                    // Place piece if exists in currentBoardState
+                    const pieceCode = currentBoardState[row][col];
+                    if (pieceCode) {
+                        const pieceElement = document.createElement('span');
+                        pieceElement.classList.add('piece');
+                        // Determine piece color based on case
+                        if (pieceCode === pieceCode.toUpperCase()) {
+                            pieceElement.classList.add('white-piece');
+                        } else {
+                            pieceElement.classList.add('black-piece');
+                        }
+                        pieceElement.textContent = pieces[pieceCode];
+                        square.appendChild(pieceElement);
+                    }
+
+                    chessboardContainer.appendChild(square);
+                }
+            }
+
+            // --- Patch Notes Modal Logic ---
+            const patchNotesBtn = document.getElementById('patchNotesBtn');
+            const patchNotesModal = document.getElementById('patchNotesModal');
+            const closeButton = patchNotesModal.querySelector('.close-button');
+            const patchNotesContent = document.getElementById('patchNotesContent');
+
+            // Define patch notes content
+            const patchNotes = `
+                <h3 class="text-xl font-semibold mb-2">Version 0.1.3 - Improved Piece Visibility</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Adjusted the color of white chess pieces to a darker shade (<code>#333333</code>) for significantly improved contrast and visibility on light squares.</li>
+                    <li>Ensured both white and black pieces use the same dark color for consistent readability across the board.</li>
+                </ul>
+                <h3 class="text-xl font-semibold mt-4 mb-2">Version 0.1.2 - Pieces on Board</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Integrated Unicode chess symbols for all pieces (pawns, rooks, knights, bishops, queens, kings).</li>
+                    <li>Implemented a function to parse a FEN-like string to represent the initial board state.</li>
+                    <li>Dynamically placed all chess pieces on their correct starting squares.</li>
+                    <li>Added basic styling to differentiate white and black pieces.</li>
+                </ul>
+                <h3 class="text-xl font-semibold mt-4 mb-2">Version 0.1.1 - Patch Notes Integration</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Added a "Patch Notes" button to the main screen.</li>
+                    <li>Implemented a modal window to display patch notes.</li>
+                    <li>Initial patch notes content is now displayed within the app.</li>
+                </ul>
+                <h3 class="text-xl font-semibold mt-4 mb-2">Version 0.1.0 - Initial Board Setup</h3>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Created the basic HTML structure for the game.</li>
+                    <li>Implemented a dynamically generated 8x8 chessboard using JavaScript.</li>
+                    <li>Applied basic CSS with Tailwind CSS for a visually appealing board with alternating light and dark squares, rounded corners, and responsive adjustments.</li>
+                    <li>Added unique IDs to each square (e.g., 'a1', 'h8') for easier referencing in future game logic.</li>
+                </ul>
+            `;
+
+            // Set the content of the patch notes modal
+            patchNotesContent.innerHTML = patchNotes;
+
+            // Show modal when button is clicked
+            patchNotesBtn.addEventListener('click', () => {
+                patchNotesModal.style.display = 'flex'; // Use flex to center content
+            });
+
+            // Hide modal when close button is clicked
+            closeButton.addEventListener('click', () => {
+                patchNotesModal.style.display = 'none';
+            });
+
+            // Hide modal when clicking outside of the modal content
+            window.addEventListener('click', (event) => {
+                if (event.target === patchNotesModal) {
+                    patchNotesModal.style.display = 'none';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
